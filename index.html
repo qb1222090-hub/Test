@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absolute Dental Pay Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Modal Transitions */
+        .modal-enter { opacity: 0; }
+        .modal-enter-active { opacity: 1; transition: opacity 200ms ease-out; }
+        .modal-exit { opacity: 1; }
+        .modal-exit-active { opacity: 0; transition: opacity 200ms ease-in; }
+
+        /* AI Loading Shimmer */
+        .shimmer {
+            background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 50%, #f3f4f6 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Hide Scrollbar for horizontal scroller but keep functionality */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-tooth text-blue-600 text-2xl"></i>
+                <div>
+                    <h1 class="text-lg font-bold text-gray-900 leading-tight">Production Tracker</h1>
+                    <p class="text-[10px] text-gray-400 font-medium">Absolute Dental</p>
+                </div>
+            </div>
+            
+            <!-- Pay Period Selector -->
+            <button onclick="openPeriodModal()" class="bg-white border border-gray-200 hover:border-blue-400 hover:bg-blue-50 px-3 py-1.5 rounded-lg shadow-sm transition-all group flex flex-col items-end">
+                <span class="text-[9px] text-gray-400 uppercase font-bold tracking-wider mb-0.5 group-hover:text-blue-500">Current Pay Period</span>
+                <div class="flex items-center text-xs font-bold text-gray-700 group-hover:text-blue-700">
+                    <span id="uiPeriodStart">---</span>
+                    <span class="mx-1">-</span>
+                    <span id="uiPeriodEnd">---</span>
+                    <i class="fa-solid fa-calendar-days ml-2 text-gray-400 group-hover:text-blue-500"></i>
+                </div>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-3xl mx-auto px-4 py-6 w-full space-y-6">
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 gap-4">
+            <!-- Daily Average (The Metric that matters) -->
+            <div id="card-avg" class="col-span-2 bg-white p-5 rounded-xl shadow-sm border-l-4 border-blue-500 flex justify-between items-center">
+                <div>
+                    <p class="text-sm text-gray-500 font-semibold uppercase tracking-wide">Daily Average (NCP)</p>
+                    <h2 class="text-3xl font-bold text-gray-900" id="dispAvg">$0.00</h2>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs text-gray-400 mb-1">Current Tier</p>
+                    <span id="dispTier" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">---</span>
+                </div>
+            </div>
+
+            <!-- Est Paycheck -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-xs text-gray-500 font-semibold uppercase">Est. Paycheck</p>
+                <h3 class="text-2xl font-bold text-green-600" id="dispPay">$0.00</h3>
+                <p class="text-[10px] text-gray-400 mt-1">Production Only</p>
+            </div>
+
+            <!-- Days Worked -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-xs text-gray-500 font-semibold uppercase">Days Worked</p>
+                <h3 class="text-2xl font-bold text-gray-700" id="dispDays">0</h3>
+                <p class="text-[10px] text-gray-400 mt-1">In Selected Period</p>
+            </div>
+        </div>
+
+        <!-- Progress Bar to Next Tier -->
+        <div class="bg-white p-4 rounded-xl shadow-sm">
+            <div class="flex justify-between text-xs font-medium text-gray-500 mb-2">
+                <span>Progress to Next Tier</span>
+                <span id="nextTierTarget">Target: $1,500</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-200 overflow-hidden">
+                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+            <p id="tierAdvice" class="text-xs text-blue-600 mt-2 font-medium italic">Add data to see status.</p>
+        </div>
+
+        <!-- AI Coach Section -->
+        <div class="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-5 text-white relative overflow-hidden">
+            <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl"></div>
+            <div class="relative z-10">
+                <h3 class="font-bold text-lg flex items-center gap-2">
+                    <i class="fa-solid fa-robot"></i> Performance Coach
+                </h3>
+                <p class="text-indigo-100 text-xs mb-4">Get AI-powered analysis on your production trends and tips to hit the next bonus tier.</p>
+                
+                <div id="aiResponseArea" class="hidden bg-white/10 backdrop-blur-sm rounded-lg p-3 mb-4 text-sm leading-relaxed border border-white/20">
+                    <!-- AI Content Goes Here -->
+                </div>
+
+                <button onclick="getAiCoaching()" id="btnCoach" class="w-full bg-white text-indigo-600 font-bold text-sm py-2.5 rounded-lg hover:bg-indigo-50 transition shadow-sm flex items-center justify-center gap-2">
+                    <span>Analyze My Production ✨</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Entry Form -->
+        <div class="bg-white p-5 rounded-xl shadow-lg border border-gray-200">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fa-solid fa-plus-circle text-blue-600 mr-2"></i> Daily Stats
+            </h3>
+            
+            <div class="space-y-4">
+                
+                <!-- New Quick Date Scroller -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-2">Select Date to Edit</label>
+                    <div id="dateScroller" class="flex space-x-2 overflow-x-auto pb-2 no-scrollbar">
+                        <!-- Date Chips injected here -->
+                    </div>
+                </div>
+
+                <!-- Production Breakdown Section -->
+                <div class="border border-green-100 bg-green-50/30 rounded-lg p-3">
+                    <p class="text-xs font-bold text-green-700 uppercase mb-2 border-b border-green-100 pb-1">Gross Production Breakdown</p>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-1">Fillings ($)</label>
+                            <input type="number" id="inFillings" placeholder="0" oninput="calcTotalGross()" class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-1">Ext / Bonegraft ($)</label>
+                            <input type="number" id="inSurgery" placeholder="0" oninput="calcTotalGross()" class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-1">Dentures (Deliv)</label>
+                            <input type="number" id="inDentures" placeholder="0" oninput="calcTotalGross()" class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-1">Crowns (Deliv)</label>
+                            <input type="number" id="inCrowns" placeholder="0" oninput="calcTotalGross()" class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-500 mb-1">Other / Exam / Hyg</label>
+                            <input type="number" id="inOther" placeholder="0" oninput="calcTotalGross()" class="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2 font-mono outline-none">
+                        </div>
+                        <!-- Auto Calculated Total -->
+                        <div class="bg-green-100 rounded-lg p-2 flex flex-col justify-center items-end border border-green-200">
+                            <span class="text-[10px] text-green-600 font-bold uppercase">Total Gross</span>
+                            <span id="dispTotalGross" class="font-mono font-bold text-green-800 text-sm">$0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deductions Section -->
+                <div class="border border-red-100 bg-red-50/30 rounded-lg p-3">
+                    <p class="text-xs font-bold text-red-500 uppercase mb-2 border-b border-red-100 pb-1">Deductions</p>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-red-400 mb-1">X-Rays</label>
+                            <input type="number" id="inXray" placeholder="0" class="w-full bg-white border border-red-100 text-red-900 text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-red-400 mb-1">Adj.</label>
+                            <input type="number" id="inAdj" placeholder="0" class="w-full bg-white border border-red-100 text-red-900 text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block p-2 font-mono outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-red-400 mb-1">Fin. Fees</label>
+                            <input type="number" id="inFees" placeholder="0" class="w-full bg-white border border-red-100 text-red-900 text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block p-2 font-mono outline-none">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <button onclick="addEntry()" class="w-full mt-4 text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-bold rounded-lg text-sm px-5 py-3 text-center transition-all shadow-md transform active:scale-[0.99]">
+                Save / Update Entry
+            </button>
+        </div>
+
+        <!-- History Table -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
+            <div class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                <h3 class="font-bold text-gray-700 text-sm">History</h3>
+                <span id="historyLabel" class="text-xs text-gray-500">Showing Current Period</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-4 py-3">Date</th>
+                            <th scope="col" class="px-4 py-3 text-right">Gross</th>
+                            <th scope="col" class="px-4 py-3 text-right text-red-500">Ded.</th>
+                            <th scope="col" class="px-4 py-3 text-right font-bold text-blue-700">NCP</th>
+                            <th scope="col" class="px-4 py-3 text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Rows Render Here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="text-center pb-8">
+             <p class="text-xs text-gray-400">Data is stored locally on this device.</p>
+        </div>
+
+    </main>
+
+    <!-- Custom Modal (Confirmations) -->
+    <div id="customModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-100 transition-all">
+            <h3 id="modalTitle" class="text-lg font-bold text-gray-900 mb-2">Confirm</h3>
+            <p id="modalMessage" class="text-gray-600 mb-6 text-sm">Are you sure?</p>
+            <div class="flex justify-end space-x-3" id="modalActions">
+                <!-- Buttons injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Selection Modal -->
+    <div id="periodModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-100 transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-900">Set Pay Period</h3>
+                <button onclick="closePeriodModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">Start Date</label>
+                    <input type="date" id="inPeriodStart" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 mb-1">End Date</label>
+                    <input type="date" id="inPeriodEnd" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                </div>
+            </div>
+
+            <div class="flex flex-col space-y-2">
+                <button onclick="savePeriod()" class="w-full text-white bg-blue-600 hover:bg-blue-700 font-bold rounded-lg text-sm px-5 py-2.5 text-center shadow-md">
+                    Update View
+                </button>
+                
+                <button onclick="tryResetData()" class="w-full text-red-500 bg-white border border-red-200 hover:bg-red-50 font-medium rounded-lg text-sm px-5 py-2.5 text-center">
+                    Clear All Data (Reset App)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- LOGIC ---
+        // Contract Constants (Addendum 3)
+        const DAY_RATE_BASE = 800;
+        const DAY_RATE_PENALTY = 400;
+        
+        // Gemini API Setup
+        const apiKey = ""; // Provided by runtime environment
+
+        // State
+        let entries = JSON.parse(localStorage.getItem('absoluteDentalEntries_v1')) || [];
+        let periodStart = localStorage.getItem('absolutePeriodStart') || getDefaultStart();
+        let periodEnd = localStorage.getItem('absolutePeriodEnd') || getDefaultEnd();
+        
+        // New State for Quick Date Picker
+        let selectedEntryDate = new Date().toISOString().split('T')[0];
+
+        // Init
+        updatePeriodDisplay();
+        renderDateScroller();
+        loadFormData(selectedEntryDate); // Load initial data for default selected date
+        render();
+
+        // --- PERIOD LOGIC ---
+        function getDefaultStart() {
+            const today = new Date();
+            const day = today.getDate();
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            return day <= 15 
+                ? new Date(y, m, 1).toISOString().split('T')[0] 
+                : new Date(y, m, 16).toISOString().split('T')[0];
+        }
+
+        function getDefaultEnd() {
+            const today = new Date();
+            const day = today.getDate();
+            const y = today.getFullYear();
+            const m = today.getMonth();
+            return day <= 15 
+                ? new Date(y, m, 15).toISOString().split('T')[0] 
+                : new Date(y, m + 1, 0).toISOString().split('T')[0];
+        }
+
+        function updatePeriodDisplay() {
+            document.getElementById('uiPeriodStart').innerText = formatShortDate(periodStart);
+            document.getElementById('uiPeriodEnd').innerText = formatShortDate(periodEnd);
+            document.getElementById('inPeriodStart').value = periodStart;
+            document.getElementById('inPeriodEnd').value = periodEnd;
+            
+            // Reset selected date if outside range
+            if (selectedEntryDate < periodStart || selectedEntryDate > periodEnd) {
+                // Default to start date of period
+                selectedEntryDate = periodStart;
+            }
+            
+            // If today is in range, select today
+            const today = new Date().toISOString().split('T')[0];
+            if (today >= periodStart && today <= periodEnd) {
+                selectedEntryDate = today;
+            }
+        }
+        
+        // --- NEW DATE SCROLLER LOGIC ---
+        function renderDateScroller() {
+            const container = document.getElementById('dateScroller');
+            container.innerHTML = '';
+
+            // FIX: Parse as UTC to avoid local timezone offset shifts (e.g. "Nov 15" becoming "Nov 14" in PST)
+            let curr = new Date(periodStart);
+            const end = new Date(periodEnd);
+
+            while (curr <= end) {
+                const dateStr = curr.toISOString().split('T')[0];
+                
+                // FIX: Force UTC Display methods to match the UTC-based loop
+                const dayName = curr.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+                const dayNum = curr.getUTCDate();
+
+                const isSelected = dateStr === selectedEntryDate;
+
+                const btn = document.createElement('button');
+                btn.className = isSelected 
+                    ? "flex-shrink-0 flex flex-col items-center justify-center w-12 h-14 rounded-xl bg-blue-600 text-white shadow-md transition-all transform scale-105" 
+                    : "flex-shrink-0 flex flex-col items-center justify-center w-12 h-14 rounded-xl bg-white border border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50 transition-all";
+                
+                btn.innerHTML = `
+                    <span class="text-[10px] font-bold uppercase leading-none mb-1 opacity-80">${dayName}</span>
+                    <span class="text-base font-bold leading-none">${dayNum}</span>
+                `;
+                
+                btn.onclick = () => {
+                    selectedEntryDate = dateStr;
+                    renderDateScroller();
+                    loadFormData(dateStr); // Load data for the clicked date
+                };
+
+                container.appendChild(btn);
+                
+                // Scroll active into view
+                if (isSelected) {
+                    setTimeout(() => btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 100);
+                }
+
+                // Next day
+                curr.setUTCDate(curr.getUTCDate() + 1);
+            }
+        }
+
+        // --- LOAD FORM DATA ---
+        function loadFormData(date) {
+            const entry = entries.find(e => e.date === date);
+            
+            if (entry) {
+                // Populate fields from existing entry
+                document.getElementById('inFillings').value = entry.breakdown?.fillings || '';
+                document.getElementById('inSurgery').value = entry.breakdown?.surgery || '';
+                document.getElementById('inDentures').value = entry.breakdown?.dentures || '';
+                document.getElementById('inCrowns').value = entry.breakdown?.crowns || '';
+                
+                // Handle legacy data (if gross exists but no breakdown, put it in 'Other')
+                if (!entry.breakdown && entry.gross > 0) {
+                    document.getElementById('inOther').value = entry.gross;
+                } else {
+                    document.getElementById('inOther').value = entry.breakdown?.other || '';
+                }
+
+                document.getElementById('inXray').value = entry.xray || '';
+                document.getElementById('inAdj').value = entry.adj || '';
+                document.getElementById('inFees').value = entry.fees || '';
+                
+                calcTotalGross(); // Update total display
+            } else {
+                // Clear fields if no entry exists
+                clearInputs();
+            }
+        }
+
+        function openPeriodModal() {
+            const el = document.getElementById('periodModal');
+            el.classList.remove('hidden');
+            el.classList.add('flex');
+        }
+
+        function closePeriodModal() {
+            const el = document.getElementById('periodModal');
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+        }
+
+        function savePeriod() {
+            const s = document.getElementById('inPeriodStart').value;
+            const e = document.getElementById('inPeriodEnd').value;
+
+            if (s > e) {
+                showModal("Invalid Dates", "Start date cannot be after end date.");
+                return;
+            }
+
+            periodStart = s;
+            periodEnd = e;
+            localStorage.setItem('absolutePeriodStart', s);
+            localStorage.setItem('absolutePeriodEnd', e);
+            
+            updatePeriodDisplay();
+            renderDateScroller(); 
+            loadFormData(selectedEntryDate); // Reload form for the potentially new default date
+            closePeriodModal();
+            render();
+        }
+
+        // --- MODAL LOGIC ---
+        const modal = document.getElementById('customModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalActions = document.getElementById('modalActions');
+
+        function showModal(title, message, type = 'alert', confirmCallback = null) {
+            modalTitle.innerText = title;
+            modalMessage.innerText = message;
+            modalActions.innerHTML = '';
+
+            if (type === 'confirm') {
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = "px-4 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 hover:text-gray-700";
+                cancelBtn.innerText = "Cancel";
+                cancelBtn.onclick = closeModal;
+
+                const confirmBtn = document.createElement('button');
+                confirmBtn.className = "px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700";
+                confirmBtn.innerText = "Yes, Do It";
+                confirmBtn.onclick = () => {
+                    if(confirmCallback) confirmCallback();
+                    closeModal();
+                };
+
+                modalActions.appendChild(cancelBtn);
+                modalActions.appendChild(confirmBtn);
+            } else {
+                const okBtn = document.createElement('button');
+                okBtn.className = "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700";
+                okBtn.innerText = "OK";
+                okBtn.onclick = closeModal;
+                modalActions.appendChild(okBtn);
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // --- UI HELPER ---
+        function calcTotalGross() {
+            const fillings = parseFloat(document.getElementById('inFillings').value) || 0;
+            const surgery = parseFloat(document.getElementById('inSurgery').value) || 0;
+            const dentures = parseFloat(document.getElementById('inDentures').value) || 0;
+            const crowns = parseFloat(document.getElementById('inCrowns').value) || 0;
+            const other = parseFloat(document.getElementById('inOther').value) || 0;
+
+            const total = fillings + surgery + dentures + crowns + other;
+            document.getElementById('dispTotalGross').innerText = "$" + formatMoney(total);
+            return total;
+        }
+
+        // --- MAIN FUNCTIONS ---
+
+        function addEntry() {
+            // Use the Quick Select Date
+            const date = selectedEntryDate;
+            
+            // Production Components
+            const fillings = parseFloat(document.getElementById('inFillings').value) || 0;
+            const surgery = parseFloat(document.getElementById('inSurgery').value) || 0;
+            const dentures = parseFloat(document.getElementById('inDentures').value) || 0;
+            const crowns = parseFloat(document.getElementById('inCrowns').value) || 0;
+            const other = parseFloat(document.getElementById('inOther').value) || 0;
+            
+            const gross = fillings + surgery + dentures + crowns + other;
+
+            // Deductions
+            const xray = parseFloat(document.getElementById('inXray').value) || 0;
+            const adj = parseFloat(document.getElementById('inAdj').value) || 0;
+            const fees = parseFloat(document.getElementById('inFees').value) || 0;
+
+            if (!date) {
+                showModal("Error", "No date selected.");
+                return;
+            }
+            
+            if (gross === 0 && (xray+adj+fees) === 0) {
+                showModal("Empty Entry", "Please enter some production data.");
+                return;
+            }
+
+            // Filter out old entry for this date so we don't have duplicates
+            // This effectively acts as an "Update"
+            entries = entries.filter(e => e.date !== date);
+
+            // Add New / Updated Entry
+            entries.push({ 
+                id: Date.now(),
+                date, 
+                gross,
+                breakdown: { fillings, surgery, dentures, crowns, other }, 
+                xray, 
+                adj, 
+                fees 
+            });
+
+            saveAndRender();
+            
+            // NOTE: We do NOT clearInputs() here anymore. 
+            // This keeps the values visible for the selected date, reinforcing that they are saved.
+        }
+
+        function tryDeleteEntry(id) {
+            showModal("Delete Entry", "Are you sure you want to remove this day? This cannot be undone.", "confirm", () => {
+                const entryToDelete = entries.find(e => e.id === id);
+                entries = entries.filter(e => e.id !== id);
+                saveAndRender();
+                
+                // If we deleted the currently selected date, clear the inputs
+                if (entryToDelete && entryToDelete.date === selectedEntryDate) {
+                    clearInputs();
+                }
+            });
+        }
+
+        function tryResetData() {
+            closePeriodModal(); // Close the period modal first
+            showModal("Clear All Data", "This will wipe ALL data from the app, not just this pay period. Are you sure?", "confirm", () => {
+                entries = [];
+                saveAndRender();
+                clearInputs();
+            });
+        }
+
+        function clearInputs() {
+            // Clear all inputs
+            ['inFillings', 'inSurgery', 'inDentures', 'inCrowns', 'inOther', 'inXray', 'inAdj', 'inFees'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            document.getElementById('dispTotalGross').innerText = "$0.00";
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('absoluteDentalEntries_v1', JSON.stringify(entries));
+            render();
+        }
+
+        function render() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            // FILTER BY DATE PERIOD
+            const filteredEntries = entries.filter(e => e.date >= periodStart && e.date <= periodEnd);
+
+            // Sort entries by date
+            const sortedEntries = [...filteredEntries].sort((a, b) => new Date(a.date) - new Date(b.date));
+            
+            let totalNCP = 0;
+            let totalDays = sortedEntries.length;
+
+            if (sortedEntries.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-400 italic">No days found in this period.</td></tr>`;
+            }
+
+            sortedEntries.forEach(entry => {
+                const deductions = entry.xray + entry.adj + entry.fees;
+                const ncp = entry.gross - deductions;
+                totalNCP += ncp;
+
+                const tr = document.createElement('tr');
+                tr.className = "bg-white border-b hover:bg-gray-50 animate-fade-in transition-colors";
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">${formatShortDate(entry.date)}</td>
+                    <td class="px-4 py-3 text-right">$${formatMoney(entry.gross)}</td>
+                    <td class="px-4 py-3 text-right text-red-500 text-xs">-$${formatMoney(deductions)}</td>
+                    <td class="px-4 py-3 text-right font-bold text-blue-600">$${formatMoney(ncp)}</td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="tryDeleteEntry(${entry.id})" class="text-gray-400 hover:text-red-600 transition-colors p-1">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            calculatePay(totalDays, totalNCP);
+        }
+
+        function calculatePay(days, totalNCP) {
+            const avg = days > 0 ? totalNCP / days : 0;
+            let pay = 0;
+            let tierLabel = "";
+            let tierColor = "";
+            let advice = "";
+            let borderColor = "border-gray-200";
+            
+            // Progress Bar Logic
+            let progress = 0;
+            let target = 0;
+            let nextTargetText = "";
+
+            // Contract Logic Addendum 3
+            if (days === 0) {
+                tierLabel = "Start Logging";
+                tierColor = "bg-gray-100 text-gray-600";
+                advice = "Add your first shift to see estimates.";
+                progress = 0;
+                nextTargetText = "Target: $1,500/day";
+            } else if (avg < 1501) {
+                // PENALTY ZONE
+                pay = days * DAY_RATE_PENALTY;
+                tierLabel = "⚠️ PENALTY RATE";
+                tierColor = "bg-red-100 text-red-700";
+                borderColor = "border-red-500";
+                advice = `Warning: You are losing $400/day. Need average > $1,500.`;
+                
+                // Progress to Safety
+                target = 1501;
+                progress = (avg / 1501) * 100;
+                nextTargetText = `Get Avg to $1,501 (Safety)`;
+
+            } else if (avg < 3500) {
+                // BASE RATE
+                pay = days * DAY_RATE_BASE;
+                tierLabel = "Base Rate ($800)";
+                tierColor = "bg-yellow-100 text-yellow-800";
+                borderColor = "border-yellow-500";
+                
+                // Progress to Bonus
+                target = 3500;
+                progress = ((avg - 1500) / (3500 - 1500)) * 100;
+                advice = `Current: Flat Rate. Hit $3,500 avg to unlock 29%.`;
+                nextTargetText = `Target: $3,500 (Bonus Unlock)`;
+
+            } else if (avg < 5500) {
+                // TIER 1 (29%)
+                pay = totalNCP * 0.29;
+                tierLabel = "BONUS (29%)";
+                tierColor = "bg-green-100 text-green-800";
+                borderColor = "border-green-500";
+
+                // Progress to Tier 2
+                target = 5500;
+                progress = ((avg - 3500) / (5500 - 3500)) * 100;
+                advice = `You are on production pay! Next jump is at $5,500.`;
+                nextTargetText = `Target: $5,500 (30% Tier)`;
+
+            } else {
+                // TIER 2 (30%)
+                pay = totalNCP * 0.30;
+                tierLabel = "MAX BONUS (30%)";
+                tierColor = "bg-blue-100 text-blue-800";
+                borderColor = "border-blue-500";
+                
+                progress = 100;
+                advice = "You are maxed out! Great work.";
+                nextTargetText = "Max Tier Reached";
+            }
+
+            // Update UI Elements
+            document.getElementById('dispDays').innerText = days;
+            document.getElementById('dispAvg').innerText = "$" + formatMoney(avg);
+            document.getElementById('dispPay').innerText = "$" + formatMoney(pay);
+            
+            const tierBadge = document.getElementById('dispTier');
+            tierBadge.className = `px-3 py-1 rounded-full text-xs font-bold ${tierColor}`;
+            tierBadge.innerText = tierLabel;
+
+            // Card Border Color update
+            const avgCard = document.getElementById('card-avg');
+            avgCard.className = `col-span-2 bg-white p-5 rounded-xl shadow-sm border-l-4 ${borderColor} flex justify-between items-center transition-colors`;
+
+            // Update Progress Bar
+            document.getElementById('progressBar').style.width = `${Math.min(progress, 100)}%`;
+            
+            // Color code progress bar
+            const pBar = document.getElementById('progressBar');
+            if(avg < 1501) pBar.className = "bg-red-500 h-2.5 rounded-full transition-all duration-500";
+            else if (avg < 3500) pBar.className = "bg-yellow-500 h-2.5 rounded-full transition-all duration-500";
+            else pBar.className = "bg-green-500 h-2.5 rounded-full transition-all duration-500";
+
+            document.getElementById('nextTierTarget').innerText = nextTargetText;
+            document.getElementById('tierAdvice').innerText = advice;
+        }
+
+        // Utils
+        function formatMoney(num) {
+            return num.toFixed(2).replace(/\d(?=(\d{3})+\.)/g, '$&,');
+        }
+
+        function formatDate(dateString) {
+            const options = { month: 'short', day: 'numeric' };
+            return new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', options);
+        }
+
+        function formatShortDate(dateString) {
+            const d = new Date(dateString + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        // --- AI FEATURES ---
+        async function getAiCoaching() {
+            const btn = document.getElementById('btnCoach');
+            const responseArea = document.getElementById('aiResponseArea');
+            
+            // UI Loading State
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Analyzing Stats...`;
+            responseArea.classList.remove('hidden');
+            responseArea.innerHTML = `<div class="h-2 bg-white/20 rounded w-3/4 mb-2 shimmer"></div><div class="h-2 bg-white/20 rounded w-1/2 shimmer"></div>`;
+
+            // Prepare Data Context
+            const filteredEntries = entries.filter(e => e.date >= periodStart && e.date <= periodEnd);
+            const totalDays = filteredEntries.length;
+            if (totalDays === 0) {
+                finishAiRequest("Please add at least one day of production data in this period first!", false);
+                return;
+            }
+
+            let totalGross = 0;
+            let totalDeductions = 0;
+            let totalNCP = 0;
+
+            // Get last 5 entries from filtered set
+            const recentEntries = [...filteredEntries].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+            
+            filteredEntries.forEach(e => {
+                totalGross += e.gross;
+                totalDeductions += (e.xray + e.adj + e.fees);
+                totalNCP += (e.gross - (e.xray + e.adj + e.fees));
+            });
+
+            const avg = totalNCP / totalDays;
+            const deductionRate = (totalDeductions / totalGross * 100).toFixed(1);
+
+            const prompt = `
+                You are a high-performance Dental Practice Coach. Analyze this dentist's production data and give brief, punchy advice to increase their paycheck.
+                
+                PAY PERIOD: ${periodStart} to ${periodEnd}
+                DATA:
+                - Daily Average (NCP): $${formatMoney(avg)}
+                - Days Worked: ${totalDays}
+                - Deduction Rate (Fees/Adj): ${deductionRate}% (Normal is <15%)
+                - Recent Days: ${JSON.stringify(recentEntries.map(e => ({d: e.date, ncp: e.gross - (e.xray+e.adj+e.fees)})))}
+
+                TIER LOGIC:
+                - < $1500: Penalty Zone (Losing money)
+                - $1500 - $3500: Base Pay (No bonus)
+                - > $3500: 29% Bonus (The Goal)
+                - > $5500: 30% Bonus (Superstar)
+
+                TASK:
+                1. Identify if they are trending up or down.
+                2. If Deduction Rate is high (>15%), warn them about adjustments/finance fees.
+                3. Give 2 specific, actionable tips to hit the next tier. 
+                
+                Keep response under 80 words. Use emojis. Be motivating but real.
+            `;
+
+            try {
+                const response = await callGeminiWithBackoff(prompt);
+                finishAiRequest(response, true);
+            } catch (error) {
+                finishAiRequest("⚠️ AI Analysis failed. Please try again later.", false);
+                console.error(error);
+            }
+        }
+
+        function finishAiRequest(text, isSuccess) {
+            const btn = document.getElementById('btnCoach');
+            const responseArea = document.getElementById('aiResponseArea');
+            
+            let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            responseArea.innerHTML = formattedText;
+            
+            btn.disabled = false;
+            btn.innerHTML = `<span>Analyze My Production ✨</span>`;
+        }
+
+        async function callGeminiWithBackoff(userPrompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const payload = {
+                contents: [{ parts: [{ text: userPrompt }] }]
+            };
+
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            
+            for (let i = 0; i <= delays.length; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "No advice generated.";
+                } catch (e) {
+                    if (i === delays.length) throw e;
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+        }
+    </script>
+</body>
+</html>
